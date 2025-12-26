@@ -31,14 +31,29 @@ print(result)
 
 ## Response Format
 
+### Success
 ```json
 {
   "status": "success",
-  "title": "Job Title",
-  "company": "Company Name",
-  "location": "City",
-  "salary": "10000 - 15000 PLN",
-  "description": "..."
+  "url": "https://theprotocol.it/szczegoly/praca/...",
+  "title": "Data Governance Specialist",
+  "company": "Mindbox Sp. z o.o.",
+  "source": "theprotocol",
+  "location": "Warszawa, Masovian",
+  "salary": "24 000 - 27 000 zł",
+  "experience_level": "mid • senior",
+  "employment_type": "B2B contract (full-time)",
+  "work_mode": "hybrid",
+  "description": "Full job description...",
+  "scraped_at": "2025-12-26T19:29:43.134663"
+}
+```
+
+### Error
+```json
+{
+  "status": "error",
+  "error_description": "Unsupported URL: No scraper available..."
 }
 ```
 
