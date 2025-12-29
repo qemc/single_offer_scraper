@@ -8,12 +8,12 @@ Async job scraper with anti-bot protection using Camoufox.
 
 Add to your `requirements.txt`:
 ```
-git+https://github.com/YOUR_USERNAME/singleOfferScraper.git
+git+https://github.com/qemc/single_offer_scraper.git
 ```
 
 Or install directly:
 ```bash
-pip install git+https://github.com/YOUR_USERNAME/singleOfferScraper.git
+pip install git+https://github.com/qemc/single_offer_scraper.git
 ```
 
 ## Usage

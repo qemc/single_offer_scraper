@@ -5,8 +5,7 @@ Async scraper using Camoufox for anti-bot protection.
 Supports: JustJoin.it, TheProtocol.it, Pracuj.pl, LinkedIn
 
 Installation:
-    pip install git+https://github.com/YOUR_USERNAME/singleOfferScraper.git
-
+    pip install git+https://github.com/qemc/single_offer_scraper.git
 Usage:
     import asyncio
     from job_scraper import scrape_offer, scrape_batch

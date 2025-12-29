@@ -11,11 +11,15 @@ Features:
 """
 
 import asyncio
+import os
 import re
 import traceback
 from datetime import datetime
 from typing import Any, Dict, List
 from urllib.parse import urlparse, parse_qs
+
+# Suppress dock icon on macOS (must be set before importing browser)
+os.environ["MOZ_HEADLESS"] = "1"
 
 from camoufox.async_api import AsyncCamoufox
 
@@ -247,6 +251,13 @@ LINKEDIN_EXTRACTION_SCRIPT = """
     const data = {};
     const bodyText = document.body.innerText;
     
+    // --- 0. Remove login modal if present ---
+    const modal = document.querySelector('.base-modal, .authwall-join-form__modal');
+    if (modal) modal.remove();
+    const overlay = document.querySelector('.modal-overlay');
+    if (overlay) overlay.remove();
+    document.body.style.overflow = 'auto';
+    
     // --- 1. Title ---
     const titleEl = document.querySelector('.jobs-unified-top-card__job-title') ||
                    document.querySelector('h1.top-card-layout__title') ||
@@ -275,57 +286,110 @@ LINKEDIN_EXTRACTION_SCRIPT = """
         } catch(e) {}
     }
 
-    // --- 3. Location ---
-    const locEl = document.querySelector('.jobs-unified-top-card__bullet') ||
-                  document.querySelector('.topcard__flavor--bullet') ||
-                  document.querySelector('.top-card-layout__first-subline span:nth-child(2)');
-                  
-    if (locEl) {
-        const txt = locEl.innerText.trim();
-        if (!['Remote', 'Hybrid', 'On-site'].includes(txt) && !txt.match(/\\d/)) {
-             data.location = txt;
+    // --- 3. Location and Work Mode from top card ---
+    const topFlavors = document.querySelectorAll('.topcard__flavor--bullet, .topcard__flavor, .top-card-layout__first-subline span');
+    for (const flavor of topFlavors) {
+        const txt = flavor.innerText?.trim() || '';
+        
+        // Check for work mode in parentheses: "Poznań, Poland (Hybrid)"
+        const modeMatch = txt.match(/\\(?(Remote|Hybrid|On-site|Zdalna|Hybrydowa)\\)?/i);
+        if (modeMatch) {
+            data.workMode = modeMatch[1];
+        }
+        
+        // Location typically contains a comma (City, Country) and is not the company name
+        if (!data.location && txt.includes(',') && txt.length > 2) {
+            // This is likely a location like "Poznań, Poland"
+            data.location = txt.replace(/\\s*\\(?(Remote|Hybrid|On-site|Zdalna|Hybrydowa)\\)?\\s*/gi, '').trim();
         }
     }
     
-    // --- 4. Work Mode ---
-    const workModeEl = document.querySelector('.jobs-unified-top-card__workplace-type');
-    if (workModeEl) {
-         data.workMode = workModeEl.innerText.trim();
-    } else {
-         const subline = document.querySelector('.top-card-layout__first-subline');
-         if (subline) {
-             const txt = subline.innerText;
-             if (txt.includes('Remote')) data.workMode = 'Remote';
-             else if (txt.includes('Hybrid')) data.workMode = 'Hybrid';
-             else if (txt.includes('On-site')) data.workMode = 'On-site';
-         }
+    // Fallback location - look for specific location element
+    if (!data.location) {
+        const locEl = document.querySelector('.jobs-unified-top-card__bullet') ||
+                      document.querySelector('.topcard__flavor--bullet');
+        if (locEl) {
+            const txt = locEl.innerText?.trim() || '';
+            // Only use if it looks like a location (has comma or Poland/Polska)
+            if (txt.includes(',') || txt.toLowerCase().includes('poland') || txt.toLowerCase().includes('polska')) {
+                data.location = txt.replace(/\\s*\\(.*\\)\\s*$/, '');
+            }
+        }
+    }
+    
+    // Last resort - try to find location in the subline
+    if (!data.location) {
+        const subline = document.querySelector('.top-card-layout__first-subline, .topcard__flavor-row');
+        if (subline) {
+            const txt = subline.innerText || '';
+            // Look for patterns like "City, Country" or just city names
+            const locMatch = txt.match(/([A-ZÀ-Ž][a-zà-ž]+(?:,\\s*[A-ZÀ-Ž][a-zà-ž]+)+)/);
+            if (locMatch) {
+                data.location = locMatch[1];
+            }
+        }
+    }
+    
+    // Fallback work mode
+    if (!data.workMode) {
+        const workModeEl = document.querySelector('.jobs-unified-top-card__workplace-type');
+        if (workModeEl) {
+            data.workMode = workModeEl.innerText.trim();
+        } else {
+            // Search in body text
+            if (bodyText.includes('Remote') || bodyText.includes('Zdalna')) data.workMode = 'Remote';
+            else if (bodyText.includes('Hybrid') || bodyText.includes('Hybrydowa')) data.workMode = 'Hybrid';
+        }
     }
 
-    // --- 5. Metadata (Seniority/Employment) ---
+    // --- 4. Metadata (Seniority/Employment) from job criteria ---
     const criteriaItems = document.querySelectorAll('.description__job-criteria-item');
     criteriaItems.forEach(item => {
-        const header = item.querySelector('.description__job-criteria-subheader')?.innerText.toLowerCase() || '';
-        const val = item.querySelector('.description__job-criteria-text')?.innerText.trim();
-        if (val) {
-            if (header.includes('seniority')) data.experienceLevel = val;
-            if (header.includes('employment')) data.employmentType = val;
+        // Fixed: use subtitle not subheader
+        const subtitle = item.querySelector('.description__job-criteria-subtitle')?.innerText?.toLowerCase() || '';
+        const text = item.querySelector('.description__job-criteria-text')?.innerText?.trim();
+        if (text) {
+            if (subtitle.includes('seniority') || subtitle.includes('poziom')) {
+                data.experienceLevel = text;
+            }
+            if (subtitle.includes('employment') || subtitle.includes('zatrudnienia')) {
+                data.employmentType = text;
+            }
+            if (subtitle.includes('function') || subtitle.includes('funkcja')) {
+                // Job function, could be useful
+            }
         }
     });
 
-    if (!data.employmentType) {
-        const insights = document.querySelectorAll('.jobs-unified-top-card__job-insight');
+    // Fallback for seniority/employment from job insights
+    if (!data.experienceLevel || !data.employmentType) {
+        const insights = document.querySelectorAll('.jobs-unified-top-card__job-insight, li');
         for (const insight of insights) {
             const text = insight.innerText?.toLowerCase() || '';
-            if (text.includes('full-time') || text.includes('part-time') || text.includes('contract')) {
-                data.employmentType = insight.innerText?.trim();
+            if (!data.employmentType) {
+                if (text.includes('full-time') || text.includes('pełny etat')) {
+                    data.employmentType = 'Full-time';
+                } else if (text.includes('part-time')) {
+                    data.employmentType = 'Part-time';
+                } else if (text.includes('contract')) {
+                    data.employmentType = 'Contract';
+                }
             }
-            if (text.includes('entry level') || text.includes('mid-senior') || text.includes('associate')) {
-                data.experienceLevel = insight.innerText?.trim();
+            if (!data.experienceLevel) {
+                if (text.includes('entry level') || text.includes('junior')) {
+                    data.experienceLevel = 'Entry level';
+                } else if (text.includes('mid-senior') || text.includes('mid')) {
+                    data.experienceLevel = 'Mid-Senior level';
+                } else if (text.includes('associate')) {
+                    data.experienceLevel = 'Associate';
+                } else if (text.includes('senior')) {
+                    data.experienceLevel = 'Senior';
+                }
             }
         }
     }
     
-    // --- 6. Description ---
+    // --- 5. Description ---
     const descContainer = document.querySelector('.jobs-description__content') ||
                          document.querySelector('.jobs-box__html-content') ||
                          document.querySelector('.description__text') ||
@@ -336,7 +400,7 @@ LINKEDIN_EXTRACTION_SCRIPT = """
         d = d.replace(/\\n\\s*Show less\\s*$/i, '').trim();
         data.description = d;
     } else {
-         const startMarker = 'Full Job Description'
+         const startMarker = 'Full Job Description';
          const idx = bodyText.indexOf(startMarker);
          if (idx > -1) {
              let cut = bodyText.substring(idx + startMarker.length);
