@@ -1,11 +1,2 @@
-# Job Offer Scraper Dependencies
-
-# Browser automation with anti-detection
-undetected-chromedriver>=3.5.0
-
-# Selenium WebDriver
-selenium>=4.15.0
-
-# Required for Python 3.12+ (distutils removed)
-setuptools>=70.0.0
-
+# Async browser automation with anti-bot protection
+camoufox[geoip]>=0.4.0

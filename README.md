@@ -1,68 +1,92 @@
-# Single Offer Scraper
+# Job Offer Scraper
 
-Scrapes job offers from Polish job boards.
+Async job scraper with anti-bot protection using Camoufox.
 
-## Supported Sites
-- JustJoin.it
-- TheProtocol.it
-- Pracuj.pl
-- LinkedIn (public view)
+**Supported sites:** JustJoin.it, TheProtocol.it, Pracuj.pl, LinkedIn
 
 ## Installation
 
-In your `requirements.txt`:
+Add to your `requirements.txt`:
 ```
-git+https://github.com/qemc/job_offer_scraper.git
+git+https://github.com/YOUR_USERNAME/singleOfferScraper.git
 ```
 
-Then:
+Or install directly:
 ```bash
-pip install -r requirements.txt
+pip install git+https://github.com/YOUR_USERNAME/singleOfferScraper.git
 ```
 
 ## Usage
 
-```python
-from job_scraper.engine import scrape_offer
+### Single URL
 
-result = scrape_offer("https://justjoin.it/job-offer/...")
-print(result)
+```python
+import asyncio
+from job_scraper import scrape_offer
+
+result = asyncio.run(scrape_offer("https://justjoin.it/job-offer/..."))
+
+if result["status"] == "success":
+    print(f"{result['title']} @ {result['company']}")
+else:
+    print(f"Error: {result['error_description']}")
 ```
 
-## Response Format
+### Batch Processing
 
-### Success
+```python
+import asyncio
+from job_scraper import scrape_batch
+
+urls = [
+    "https://justjoin.it/job-offer/...",
+    "https://linkedin.com/jobs/view/...",
+    "https://theprotocol.it/szczegoly/praca/...",
+]
+
+results = asyncio.run(scrape_batch(urls))
+
+for r in results:
+    print(f"{r['title']} @ {r['company']}")
+```
+
+### Configure Concurrency
+
+Default: 3 concurrent browsers. Lower for memory-constrained devices.
+
+```python
+from job_scraper import set_max_concurrent_browsers
+
+set_max_concurrent_browsers(2)  # Raspberry Pi
+```
+
+## Response Schema
+
 ```json
 {
   "status": "success",
-  "initial_url": "https://linkedin.com/jobs/view/123?tracking=...",
-  "url": "https://linkedin.com/jobs/view/123",
-  "title": "Data Governance Specialist",
-  "company": "Mindbox Sp. z o.o.",
-  "source": "theprotocol",
-  "location": "Warszawa, Masovian",
-  "salary": "24 000 - 27 000 zł",
-  "experience_level": "mid • senior",
-  "employment_type": "B2B contract (full-time)",
-  "work_mode": "hybrid",
+  "initial_url": "https://...",
+  "url": "https://...",
+  "title": "Job Title",
+  "company": "Company Name",
+  "source": "justjoin|theprotocol|pracuj|linkedin",
+  "location": "City",
+  "salary": "10000 - 15000 PLN",
+  "experience_level": "Junior|Mid|Senior",
+  "employment_type": "B2B|UoP",
+  "work_mode": "Remote|Hybrid|On-site",
   "description": "Full job description...",
-  "scraped_at": "2025-12-26T19:29:43.134663"
+  "scraped_at": "2025-12-29T12:00:00.000000"
 }
 ```
 
-**Note:** `initial_url` is the exact URL passed to `scrape_offer()`, while `url` may be cleaned/normalized by the scraper.
+## Error Handling
 
-### Error
+Errors return the same structure with `status: "error"`:
 ```json
 {
   "status": "error",
-  "initial_url": "https://example.com/invalid-job",
-  "error_description": "Unsupported URL: No scraper available..."
+  "initial_url": "https://...",
+  "error_description": "Detailed error message"
 }
-```
-
-## Raspberry Pi / Headless Server
-
-```bash
-xvfb-run -a python your_script.py
 ```
