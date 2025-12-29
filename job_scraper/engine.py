@@ -55,11 +55,11 @@ def scrape_offer(url: str) -> Dict[str, Any]:
     initial_url = url
     url = url.strip()
     
-    # Find appropriate scraper
     scraper = get_scraper_for_url(url)
     if not scraper:
         return {
             "status": "error",
+            "initial_url": initial_url,
             "error_description": f"Unsupported URL: No scraper available for '{url}'. Supported sites: JustJoin.it, TheProtocol.it, Pracuj.pl, LinkedIn"
         }
 
@@ -73,6 +73,7 @@ def scrape_offer(url: str) -> Dict[str, Any]:
             if driver is None:
                 return {
                     "status": "error",
+                    "initial_url": initial_url,
                     "error_description": "Browser initialization failed: Could not create Chrome driver"
                 }
             
@@ -82,6 +83,7 @@ def scrape_offer(url: str) -> Dict[str, Any]:
             if offer is None:
                 return {
                     "status": "error",
+                    "initial_url": initial_url,
                     "error_description": "Scraping returned no data: The page may have changed or is not accessible"
                 }
             
@@ -94,11 +96,13 @@ def scrape_offer(url: str) -> Dict[str, Any]:
     except TimeoutError as e:
         return {
             "status": "error",
+            "initial_url": initial_url,
             "error_description": f"Timeout: Page took too long to load. {str(e)}"
         }
     except ConnectionError as e:
         return {
             "status": "error",
+            "initial_url": initial_url,
             "error_description": f"Connection error: Could not reach the website. {str(e)}"
         }
     except Exception as e:
@@ -106,5 +110,6 @@ def scrape_offer(url: str) -> Dict[str, Any]:
         error_trace = traceback.format_exc()
         return {
             "status": "error",
+            "initial_url": initial_url,
             "error_description": f"Scraping failed: {str(e)}\n\nTraceback:\n{error_trace}"
         }

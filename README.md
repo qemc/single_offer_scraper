@@ -56,6 +56,7 @@ print(result)
 ```json
 {
   "status": "error",
+  "initial_url": "https://example.com/invalid-job",
   "error_description": "Unsupported URL: No scraper available..."
 }
 ```

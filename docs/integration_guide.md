@@ -48,6 +48,7 @@ else:
 ```json
 {
   "status": "error",
+  "initial_url": "https://example.com/job-url",
   "error_description": "Detailed error message with traceback if applicable"
 }
 ```
