@@ -35,7 +35,8 @@ print(result)
 ```json
 {
   "status": "success",
-  "url": "https://theprotocol.it/szczegoly/praca/...",
+  "initial_url": "https://linkedin.com/jobs/view/123?tracking=...",
+  "url": "https://linkedin.com/jobs/view/123",
   "title": "Data Governance Specialist",
   "company": "Mindbox Sp. z o.o.",
   "source": "theprotocol",
@@ -48,6 +49,8 @@ print(result)
   "scraped_at": "2025-12-26T19:29:43.134663"
 }
 ```
+
+**Note:** `initial_url` is the exact URL passed to `scrape_offer()`, while `url` may be cleaned/normalized by the scraper.
 
 ### Error
 ```json

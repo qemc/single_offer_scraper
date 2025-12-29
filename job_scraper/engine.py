@@ -51,6 +51,8 @@ def scrape_offer(url: str) -> Dict[str, Any]:
             "error_description": "Invalid URL: URL must be a non-empty string"
         }
     
+    # Save original URL before any processing
+    initial_url = url
     url = url.strip()
     
     # Find appropriate scraper
@@ -86,6 +88,7 @@ def scrape_offer(url: str) -> Dict[str, Any]:
             # Build success response
             result = offer.to_dict()
             result["status"] = "success"
+            result["initial_url"] = initial_url
             return result
             
     except TimeoutError as e:

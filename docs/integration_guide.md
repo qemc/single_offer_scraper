@@ -27,7 +27,8 @@ else:
 ```json
 {
   "status": "success",
-  "url": "https://...",
+  "initial_url": "https://linkedin.com/jobs/view/123?tracking=...",
+  "url": "https://linkedin.com/jobs/view/123",
   "title": "Job Title",
   "company": "Company Name",
   "source": "justjoin|theprotocol|pracuj|linkedin",
@@ -40,6 +41,8 @@ else:
   "scraped_at": "2025-12-25T14:06:39.232881"
 }
 ```
+
+**Note:** `initial_url` is the exact URL passed to `scrape_offer()`, while `url` may be cleaned/normalized.
 
 ### Error Response
 ```json
