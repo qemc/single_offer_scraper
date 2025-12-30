@@ -89,7 +89,49 @@ JUSTJOIN_EXTRACTION_SCRIPT = """
     }
 
     // --- Location ---
-    var location = getTextByIcon('LocationOnOutlinedIcon');
+    // Try to extract from ld+json structured data first (most reliable)
+    var location = null;
+    var ldJsonScript = document.querySelector('script[type="application/ld+json"]');
+    if (ldJsonScript) {
+        try {
+            var ldJson = JSON.parse(ldJsonScript.textContent);
+            if (ldJson.jobLocation && ldJson.jobLocation.address) {
+                var addr = ldJson.jobLocation.address;
+                var parts = [];
+                if (addr.streetAddress) parts.push(addr.streetAddress);
+                if (addr.addressLocality) parts.push(addr.addressLocality);
+                if (parts.length > 0) location = parts.join(', ');
+            }
+        } catch(e) {}
+    }
+    
+    // Fallback: Find location as sibling to company icon container
+    if (!location) {
+        var companyIcon = document.querySelector('svg[data-testid="ApartmentRoundedIcon"]');
+        if (companyIcon) {
+            // Location is typically in a sibling MuiBox-root before the company link
+            var companyContainer = companyIcon.closest('a, div[class*="MuiStack"]');
+            if (companyContainer && companyContainer.parentElement) {
+                var siblings = companyContainer.parentElement.children;
+                for (var i = 0; i < siblings.length; i++) {
+                    var sib = siblings[i];
+                    // Skip the company link itself and separators
+                    if (sib.tagName === 'A' || sib.tagName === 'SPAN') continue;
+                    var sibText = sib.innerText.trim();
+                    // Location typically contains comma or city name
+                    if (sibText && sibText.length > 2 && sibText.length < 100) {
+                        location = sibText;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Last fallback: try old icon selector
+    if (!location) {
+        location = getTextByIcon('LocationOnOutlinedIcon') || getTextByIcon('PlaceIcon');
+    }
     data.location = location;
 
     // --- Metadata Chips (Seniority, Mode, Type) ---
@@ -429,52 +471,160 @@ PRACUJ_EXTRACTION_SCRIPT = """
         return el ? el.innerText.trim() : null;
     }
     
+    // Helper to get badge title text from a sections-benefit element
+    function getBadgeTitle(sectionTestId) {
+        const section = document.querySelector(`[data-test="${sectionTestId}"]`);
+        if (section) {
+            const titleEl = section.querySelector('[data-test="offer-badge-title"]');
+            return titleEl ? titleEl.innerText.trim() : null;
+        }
+        return null;
+    }
+    
     // --- Title ---
     data.title = getTestText('text-positionName') || document.querySelector('h1')?.innerText?.trim() || '';
     
-    // --- Company ---
+    // --- Company (clean up "O firmie" / "About the company" suffix) ---
     let company = getTestText('text-employerName') || 
                   document.querySelector('[data-test="anchor-company-profile"]')?.innerText.trim();
+    if (company) {
+        company = company.replace(/O firmie$/i, '').replace(/About the company$/i, '').trim();
+    }
     data.company = company || '';
     
     // --- Salary ---
-    data.salary = getTestText('text-salary');
-    
-    // --- Location ---
-    data.location = getTestText('text-workplaceAddress');
-    
-    // --- Work Mode ---
-    const modeEl = document.querySelector('[data-test="text-workModes"]');
-    if (modeEl) {
-        data.workMode = modeEl.innerText.trim();
+    // The salary section uses data-test="section-salary" and each amount is in data-test="text-earningAmount"
+    const salarySection = document.querySelector('[data-test="section-salary"]');
+    if (salarySection) {
+        // Get all earning amounts (there may be multiple for different contract types)
+        const earningAmounts = salarySection.querySelectorAll('[data-test="text-earningAmount"]');
+        if (earningAmounts.length > 0) {
+            const salaries = [];
+            earningAmounts.forEach(el => {
+                const amount = el.innerText.trim();
+                // Get the contract type following this amount
+                const parent = el.closest('[data-test="section-salaryPerContractType"]');
+                if (parent) {
+                    const contractType = parent.querySelector('[data-test="text-contractTypeName"]');
+                    if (contractType) {
+                        salaries.push(amount + ' ' + contractType.innerText.trim());
+                    } else {
+                        salaries.push(amount);
+                    }
+                } else {
+                    salaries.push(amount);
+                }
+            });
+            data.salary = salaries.join('; ');
+        }
     }
     
-    // --- Experience Level ---
-    const expEl = document.querySelector('[data-test="text-experienceLevel"]');
-    if (expEl) {
-        data.experienceLevel = expEl.innerText.trim();
+    // Fallback to old text-salary selector if section-salary not found
+    if (!data.salary) {
+        data.salary = getTestText('text-salary');
     }
     
-    // --- Employment Type ---
-    const typeEl = document.querySelector('[data-test="text-contractType"]');
-    if (typeEl) {
-        data.employmentType = typeEl.innerText.trim();
+    // --- Location (from sections-benefit-workplaces or map section) ---
+    data.location = getBadgeTitle('sections-benefit-workplaces');
+    if (!data.location) {
+        // Try the map section with full address
+        const streetEl = document.querySelector('[data-test="text-address-street"]');
+        const addressEl = document.querySelector('[data-test="text-address"]');
+        if (streetEl && addressEl) {
+            data.location = streetEl.innerText.trim() + ', ' + addressEl.innerText.trim();
+        } else if (addressEl) {
+            data.location = addressEl.innerText.trim();
+        } else if (streetEl) {
+            data.location = streetEl.innerText.trim();
+        }
+    }
+    // Clean up location - remove region suffix in parentheses like "(Masovian)"
+    if (data.location) {
+        data.location = data.location.replace(/\\s*\\([^)]*\\)\\s*$/, '').trim();
     }
     
-    // --- Description ---
-    const descSections = document.querySelectorAll('[data-test*="section-"], [data-scroll-id]');
+    // --- Employment Type / Contract (from sections-benefit-contracts) ---
+    data.employmentType = getBadgeTitle('sections-benefit-contracts');
+    
+    // --- Work Schedule / Hours (from sections-benefit-work-schedule) ---
+    const workSchedule = getBadgeTitle('sections-benefit-work-schedule');
+    if (workSchedule) {
+        // Append to employment type if it exists
+        if (data.employmentType) {
+            data.employmentType += ', ' + workSchedule;
+        } else {
+            data.employmentType = workSchedule;
+        }
+    }
+    
+    // --- Experience Level / Seniority (from sections-benefit-employment-type-name) ---
+    data.experienceLevel = getBadgeTitle('sections-benefit-employment-type-name');
+    
+    // --- Work Mode (from any sections-benefit-work-modes-* element) ---
+    // The attribute can have suffixes like -hybrid, -many, -remote, etc.
+    const workModeEl = document.querySelector('[data-test^="sections-benefit-work-modes"]');
+    if (workModeEl) {
+        const titleEl = workModeEl.querySelector('[data-test="offer-badge-title"]');
+        if (titleEl) {
+            data.workMode = titleEl.innerText.trim();
+        }
+    }
+    
+    // --- Fallback: Try old selectors if new structure didn't provide data ---
+    if (!data.location) {
+        data.location = getTestText('text-workplaceAddress');
+    }
+    if (!data.workMode) {
+        const modeEl = document.querySelector('[data-test="text-workModes"]');
+        if (modeEl) data.workMode = modeEl.innerText.trim();
+    }
+    if (!data.experienceLevel) {
+        const expEl = document.querySelector('[data-test="text-experienceLevel"]');
+        if (expEl) data.experienceLevel = expEl.innerText.trim();
+    }
+    if (!data.employmentType) {
+        const typeEl = document.querySelector('[data-test="text-contractType"]');
+        if (typeEl) data.employmentType = typeEl.innerText.trim();
+    }
+    
+    // --- Description (new structure uses multiple section-* elements) ---
+    const descSections = [
+        'section-about-project',
+        'section-responsibilities', 
+        'section-requirements',
+        'section-offered',
+        'section-benefits',
+        'section-technologies',
+        'section-about-us',
+        'section-description'
+    ];
+    
     const descParts = [];
-    descSections.forEach(sec => {
-        if (sec.innerText && sec.innerText.trim().length > 20) {
+    descSections.forEach(sectionId => {
+        const sec = document.querySelector(`[data-test="${sectionId}"]`);
+        if (sec && sec.innerText && sec.innerText.trim().length > 10) {
             descParts.push(sec.innerText.trim());
         }
     });
     
+    // Fallback: try generic section selector
+    if (descParts.length === 0) {
+        const genericSections = document.querySelectorAll('[data-test*="section-"]');
+        genericSections.forEach(sec => {
+            const text = sec.innerText?.trim() || '';
+            if (text.length > 20 && !descParts.includes(text)) {
+                descParts.push(text);
+            }
+        });
+    }
+    
     if (descParts.length > 0) {
         data.description = descParts.join('\\n\\n');
     } else {
-        // Fallback to main content area
-        const mainContent = document.querySelector('[data-test="section-description"]');
+        // Last resort: get main content area
+        const mainContent = document.querySelector('[data-scroll-id]') || 
+                           document.querySelector('main') ||
+                           document.querySelector('[role="main"]');
         data.description = mainContent?.innerText?.trim() || '';
     }
     
