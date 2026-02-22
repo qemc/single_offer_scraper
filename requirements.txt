@@ -1,2 +1,2 @@
 # Async browser automation with anti-bot protection
-camoufox[geoip]>=0.4.0
+camoufox>=0.4.0

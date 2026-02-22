@@ -2,6 +2,8 @@
 Scraper Configuration.
 """
 
+import os
+
 # Async Scraping Configuration
 SCRAPING_CONFIG = {
     # Maximum concurrent browser instances for batch processing
@@ -10,6 +12,10 @@ SCRAPING_CONFIG = {
     
     # Page load timeout in milliseconds
     "page_timeout_ms": 30000,
+    
+    # Enable GeoIP database download and use for Camoufox
+    # Default is False to speed up deployment/initial run
+    "use_geoip": os.getenv("USE_GEOIP", "false").lower() in ("true", "1", "yes"),
 }
 
 

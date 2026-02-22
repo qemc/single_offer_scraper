@@ -797,7 +797,7 @@ async def scrape_offer(url: str) -> Dict[str, Any]:
             async with AsyncCamoufox(
                 headless=True,
                 humanize=True,
-                geoip=True,
+                geoip=SCRAPING_CONFIG.get("use_geoip", False),
             ) as browser:
                 page = await browser.new_page()
                 
